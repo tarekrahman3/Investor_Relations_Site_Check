@@ -2,6 +2,7 @@ import requests
 import os
 import csv
 import re
+import time
 headers = {'accept': 'text/html,application/xhtml+xml,application/xml','user-agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.114 Safari/537.36'}
 
 domains = []
@@ -12,42 +13,16 @@ with open('import.csv','r') as csv_file:
         domains.append({'index':f'Serial_{i}','root_address':row['links']})
         i+=1
 
-def Press_pattern(root):
-    regex = r'^http:\/\/www\.|^https:\/\/www\.|^https:\/\/|^http:\/\/|^www\.|\/$'
-    url = re.sub(regex,'',root)
-    pattern = {
-        'p0' : f"http://{url}//press-releases",
-        'p1' : f"http://{url}//news-releases",
-        'p2' : f"http://{url}//news",
-        'p3' : f"http://{url}//news-and-events",
-        'p4' : f"http://{url}//financial-releases",
-        }
-    return pattern
-
-def press_release():
-    result=[]
-    for domain in domains:
-        pattern = Press_pattern(domain['root_address'])
-        print(f'\t{domain}')
-        
-        request_url = pattern['p1']
-        try:
-            test = requests.get(request_url,timeout=3,headers=headers)
-            if test.status_code==200:
-                info = {
-                    'index':domain['index'],
-                    'domain':domain['root_address'],
-                    'request_url':request_url,
-                    'response_url':test.url,
-                    'status':test
-                    }
-                result.append(info)
-                print(info)
-            else:
-                pass
-        except:
-            pass
-    return result
+def testURL(url):
+    try:
+        resp = requests.get(url,timeout=3,headers=headers)
+        resp.connection.close()
+        if resp.status_code!=200:
+            return False
+        else:
+            return resp
+    except:
+        return False
 
 def Investor_pattern(root):
     pattern = {
@@ -91,10 +66,63 @@ def Investot_relation():
             pass
     return result
 
-result = press_release()
-with open('export.csv', 'w') as csvfile:
+
+def Press_pattern(root):
+    regex = r'^http:\/\/www\.|^https:\/\/www\.|^https:\/\/|^http:\/\/|^www\.|\/$'
+    url = re.sub(regex,'',root)
+    pattern = {
+        '0' : f"http://{url}//press-releases",
+        '1' : f"http://{url}//news-releases",
+        '2' : f"http://{url}//news",
+        '3' : f"http://{url}//news-and-events",
+        '4' : f"http://{url}//financial-releases",
+        }
+    return pattern
+
+
+def press_release_with_switchCase():
+    matched_result = []
+    unmatched_result = []
+    for domain in domains:
+        url = Press_pattern(domain['root_address'])
+        i=0
+        while True:
+            if i==5:
+                unmatched_result.append({'index':domain['index'],'remaining urls':domain['root_address']})
+                print(f"'index':{domain['index']} - did not match any pattern for {domain['root_address']}")
+                break
+            r = testURL(url[str(i)])
+            if r == False:
+                pass
+            elif r != False:
+                info = {
+                    'index':domain['index'],
+                    'domain':domain['root_address'],
+                    'request_url':url[str(i)],
+                    'response_url':r.url,
+                    'status':r
+                    }
+                matched_result.append(info)
+                print(info)
+                break
+            i+=1
+    return matched_result, unmatched_result
+
+
+#result = Investot_relation()
+
+matched_result, unmatched_result = press_release_with_switchCase()
+
+with open(f'export of matched result at {time.ctime()}.csv', 'w') as csvfile:
     fields = ['index','domain','request_url','response_url','status']
     writer = csv.DictWriter(csvfile, fieldnames = fields)
     writer.writeheader()
-    writer.writerows(result)
+    writer.writerows(matched_result)
+    csvfile.close()
+
+with open(f'export of UNmatched result at {time.ctime()}.csv', 'w') as csvfile:
+    fields = ['index','remaining urls']
+    writer = csv.DictWriter(csvfile, fieldnames = fields)
+    writer.writeheader()
+    writer.writerows(unmatched_result)
     csvfile.close()
